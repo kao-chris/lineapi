@@ -1,28 +1,26 @@
 from flask import Flask, request, abort
-from linebot.v3.messaging import MessagingApi, Configuration
-from linebot.models import MessageEvent, TextMessage, TextSendMessage
-from linebot.v3.exceptions import InvalidSignatureError
-import os
-from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
+from linebot.models import TextMessage, MessageEvent
+from dotenv import load_dotenv
+import os
 
-from linebot.v3.messaging import (
-    Configuration,
-    ApiClient,
-    MessagingApi,
-    ReplyMessageRequest,
-    TextMessage
-)
-app = Flask(__name__)
+# 加載環境變數
+load_dotenv()
 
 # 從環境變數獲取 LINE 的 Channel Access Token 和 Channel Secret
-LINE_ACCESS_TOKEN = os.getenv('0yzpqMd2ecAgeXIpRni1NcHtGLhYdVGJ/DbegKTZ+YoTx9SMR5T2JX/1IWRl75hvNuySF6GorTFF+MY+FO7rQVHhZT4bz9fT8XsJZiEInYa9yRjhTnVFcxvYb3oavk0T0M1sh5mqTyTdXmnjou8iGAdB04t89/1O/w1cDnyilFU=')
-LINE_CHANNEL_SECRET = os.getenv('32863e4522fb44c95d3c752734223067')
+LINE_ACCESS_TOKEN = os.getenv('LINE_ACCESS_TOKEN')
+LINE_CHANNEL_SECRET = os.getenv('LINE_CHANNEL_SECRET')
 
-# 設定 LINE SDK 3.0+ 的 Configuration
-config = Configuration(access_token=LINE_ACCESS_TOKEN)
+if LINE_ACCESS_TOKEN is None or LINE_CHANNEL_SECRET is None:
+    raise ValueError("LINE_ACCESS_TOKEN or LINE_CHANNEL_SECRET not set. Please check your environment variables.")
+
+# 設定 LINE SDK
 line_bot_api = LineBotApi(LINE_ACCESS_TOKEN)
+handler = WebhookHandler(LINE_CHANNEL_SECRET)
+
+app = Flask(__name__)
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     signature = request.headers["X-Line-Signature"]
@@ -30,16 +28,13 @@ def webhook():
 
     # 驗證簽名是否正確
     try:
-        # 檢查是否為有效的事件
-        events = line_bot_api.parse_events_from(body)
-        for event in events:
-            if isinstance(event, MessageEvent):
-                handle_message(event)
+        handler.handle(body, signature)
     except InvalidSignatureError:
         abort(400)
 
     return "OK"
 
+@handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     # 取得用戶發送的訊息
     user_message = event.message.text
@@ -48,7 +43,7 @@ def handle_message(event):
     # 回覆訊息
     line_bot_api.reply_message(
         event.reply_token,
-        [TextMessage(text=reply_message)]
+        TextMessage(text=reply_message)
     )
 
 if __name__ == "__main__":
